@@ -1,46 +1,146 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <title>Exercise Tracker | freeCodeCamp</title>
-    <link rel="shortcut icon" href="https://cdn.freecodecamp.org/universal/favicons/favicon.ico"  type="image/x-icon" />
-    <link href="https://fonts.googleapis.com/css?family=Roboto" rel="stylesheet" type="text/css" />
-    <link href="style.css" rel="stylesheet" type="text/css" />
-  </head>
+const express = require('express')
+const app = express()
+const cors = require('cors')
+require('dotenv').config()
+const bodyParser = require("body-parser")
+const { json } = require('express/lib/response')
+const { create } = require('domain')
+app.use(
+    bodyParser.urlencoded({
+        extended: true
+    })
+);
+app.use(cors())
+app.use(express.static('public'))
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/views/index.html')
+});
 
-  <body>
-    <div class="container">
-      <h1>Exercise tracker</h1>
-      <form action="/api/users" method="post">
-        <h2>Create a New User</h2>
-        <p><code>POST /api/users</code></p>
-        <input id="uname" type="text" name="username" placeholder="username" />
-        <input type="submit" value="Submit" />
-      </form>
-      <form action="/api/users/:_id/exercises" id="exercise-form" method="post">
-        <h2>Add exercises</h2>
-        <p><code>POST /api/users/:_id/exercises</code></p>
-        <input id="uid" type="text" name=":_id" placeholder=":_id" />
-        <input id="desc" type="text" name="description" placeholder="description*" />
-        <input id="dur" type="text" name="duration" placeholder="duration* (mins.)" />
-        <input id="date" type="text" name="date" placeholder="date (yyyy-mm-dd)" />
-        <input type="submit" value="Submit" />
-      </form>
-      <p>
-        <strong>GET user's exercise log: </strong>
-        <code>GET /api/users/:_id/logs?[from][&amp;to][&amp;limit]</code>
-      </p>
-      <p><strong>[ ]</strong> = optional</p>
-      <p><strong>from, to</strong> = dates (yyyy-mm-dd); <strong>limit</strong> = number</p>
-    </div>
-    <script>
-      const exerciseForm = document.getElementById("exercise-form");
+//set up how IDs are formed 
+function createID() {
+    let letter = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'x', 'w', 'y', 'z'];
+    let assignedLetter = Math.floor(Math.random() * letters.length());
+    let assignId = new Date().getDay() + Math.floor(Math.random() * 100) + letter[assignedLetter];
+    return assignId;
+}
+//set up arry/database of users
+let users = [
+    {
+        username: 'User_1', _id: createID(), Log:
+            [{ description: 'running', duration: 20, date: checkDate() }, { description: 'yoga', duration: 45, date: checkDate() }]
+    }, 
+    {
+        username: 'User_2', _id: createID(), Log:
+            [{ description: 'swim', duration: 30, date: checkDate() }, { description: 'walk', duration: 120, date: checkDate() }]
+    }
+];
 
-      exerciseForm.addEventListener("submit", () => {
-        const userId = document.getElementById("uid").value;
-        exerciseForm.action = `/api/users/${userId}/exercises`;
+//set date if none supplied
+function checkDate(date) {
+    let assignDate;
+    if (date == null) {
+        assignDate = new Date().toDateString();
+    }
+    else {
+        assignDate = date.toDateString();
+    }
+    return assignDate;
+} 
 
-        exerciseForm.submit();
-      });
-    </script>
-  </body>
-</html>
+app.post('/api/users', (req, res) => {
+    let username = req.body.username;
+    users.push({ username: username, _id: createID()});
+    res.json({username: username, _id: id });
+})
+
+app.get('/api/users', (req, res) => {
+    res.json(users);
+})
+
+app.post('/api/users/:_id/exercises', (req, res) => {
+    let id = req.params._id;
+    let description = req.body.description;
+    let duration = Number(req.body.duration);
+    let date = checkDate(req.body.date);
+
+    let idFound = false;
+    let indexArray;
+    users.forEach((user, index) => {
+        if (user._id == id) {
+            idFound = true;
+            indexArray = index;
+            username = user.username;
+            let logReceived = { description: description, duration: duration, date: date };
+            users[index].Log.push(logReceived);
+        }
+
+    });
+
+    if (idFound == false) {
+            res.json('Invalid ID');
+            next();
+    }
+
+    res.json(
+        {
+            username: users[indexArray].username,
+            description: description,
+            duration: duration,
+            date: date,
+            _id: users[indexArray]._id
+        }
+    );
+})
+
+app.get('/api/users/:_id/logs?[from][&to][&limit]', (req, res) => {
+    let id = req.params._id;
+    let from = req.params.from.toDateString();
+    let to = req.params.to.toDateString();
+    let limit = req.params.limit;
+
+    if (from == null && to == null && limit == null) {
+
+        users.forEach(user => {
+            if (user._id == id) {
+                res.json({
+                    username: user.username,
+                    count: user.Log.length(),
+                    _id: user._id,
+                    Log: user.Log
+                });
+
+            }
+        });
+    }
+    else if (from == null || to == null || limit == null) {
+        res.json('Invalid parameters')
+    }
+    else {
+
+        users.forEach(user => {
+            if (user._id == id) {
+                let logsWithinRange = [];
+                //then need to forEach the logs to see the dates then stop at the limit
+                user.Log.forEach(log => {
+                    if (log.date >= from && log.date <= to) {
+                        if (limit > 0) {
+                            logsWithinRange.push(log);
+                            limit--;
+                        }
+                    }
+                });
+                res.json({
+                    username: user.username,
+                    count: user.Log.length(),
+                    _id: user._id,
+                    Log: logsWithinRange
+                });
+
+            }
+        });
+    }
+})
+
+const listener = app.listen(process.env.PORT || 3000, () => {
+    console.log('Your app is listening on port ' + listener.address().port)
+})// JavaScript source code
